@@ -24,6 +24,7 @@ The toolkit is available from NuGet:
 * [Solution structure recommendation](docs/SolutionStructureRecommendation.md)
 * [Steps for deploying policies created by the policy toolkit](docs/IntegratePolicySolution.md)
 * [Integrate policy solution with APIOps](docs/IntegratePolicySolutionWithApiOps.md)
+* [Author .NET modules for `run-wasm-module` (experimental)](docs/WasmPolicyModules.md)
 
 #### Azure API Management policy toolkit documentation for contributors.
 * [Contributor guide](CONTRIBUTING.md)

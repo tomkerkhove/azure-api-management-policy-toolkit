@@ -477,5 +477,6 @@ TestResults/
 
 # Temp output
 output/
+prototype/wasm-policy/.tools/
 .claude/
 plan.md
