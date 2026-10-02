@@ -4,8 +4,9 @@ This source-only prototype explores a separate .NET authoring model for APIM
 `run-wasm-module` guests. It does not change the existing C#-to-XML Policy Toolkit
 compiler into a WebAssembly compiler.
 
-Read the complete [customer journey and current blocker](../../docs/WasmPolicyModules.md)
-before using the build scripts.
+Start with the [customer quickstart](../../docs/WasmPolicyQuickstart.md), then use
+the [technical guide](../../docs/WasmPolicyModules.md) for API, build, validation,
+and troubleshooting details.
 
 ## Validate locally
 
