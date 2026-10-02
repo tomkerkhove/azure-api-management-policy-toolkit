@@ -57,30 +57,37 @@ WIT bindings to expose it as the APIM `handler` export.
 
 ## Prerequisites
 
-The documented local path for this prototype is Windows x64 with PowerShell 7:
+The direct library-user path uses:
 
 - .NET SDK `10.0.400`
 - .NET runtime `8.0`
-- `rustup`
-- access to the public NuGet, crates.io, Rust, LLVM, GitHub release, and
-  `dotnet-experimental` endpoints used by the pinned dependencies
+- Componentize.NET Wasm SDK `0.8.0-preview00011`
+- NativeAOT-LLVM `10.0.0-rc.1.26306.1`
+- prebuilt `wasm-tools` `1.256.0` for contract inspection
+- prebuilt ORAS `1.3.0` for OCI packaging after compatibility succeeds
 
-Install the pinned tools:
+The pinned Componentize.NET build does not install or require the
+`wasi-experimental` workload. The SDK's NuGet/MSBuild targets generate WIT
+bindings and the component. It was verified with `dotnet workload list` showing no
+installed workloads.
 
-```powershell
-cd prototype\wasm-policy
+Componentize.NET and NativeAOT-LLVM are prerelease. The component project uses
+NuGet.org plus the public `dotnet-experimental` feed:
 
-rustup toolchain install 1.94.1 --profile minimal
-.\eng\Install-Tools.ps1
-
-$env:PATH = "$(Resolve-Path .\.tools\bin);$(Resolve-Path .\.tools\oras-1.3.0);$env:PATH"
-$Oras = Resolve-Path .\.tools\oras-1.3.0\oras.exe
+```xml
+<packageSources>
+  <clear />
+  <add
+      key="dotnet-experimental"
+      value="https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-experimental/nuget/v3/index.json" />
+  <add
+      key="nuget.org"
+      value="https://api.nuget.org/v3/index.json" />
+</packageSources>
 ```
 
-`Install-Tools.ps1` verifies the downloaded `wasm-tools`,
-`hyperlight-wasm-aot`, and ORAS archives before installing them under `.tools`.
-Exact versions and hashes are centralized in
-[`eng/versions.json`](../prototype/wasm-policy/eng/versions.json).
+The experimental Toolkit API is source-only. Use the checked-in sample project;
+there is no customer NuGet package or template yet.
 
 ## Authoring model
 
@@ -168,6 +175,8 @@ generated WIT bindings. The sample policy API does not wrap it yet.
 Keep decision logic independent from generated bindings and run it as normal .NET:
 
 ```powershell
+dotnet restore .\WasmPolicyPrototype.slnx --locked-mode
+
 dotnet test .\test\AuthCheck.Tests\AuthCheck.Tests.csproj --configuration Release
 ```
 
@@ -199,79 +208,134 @@ The WIT contract matters because APIM links a module by exact, versioned imports
 and exports. Matching C# type names or producing a valid `.wasm` file is not
 enough.
 
-## Build the component, AOT, and OCI layout
+## Build the component with .NET
 
-Run the high-level build:
+Build the Componentize.NET project directly:
 
 ```powershell
-.\eng\Build-Prototype.ps1 -OrasPath $Oras
+dotnet build `
+    .\samples\AuthCheck.Component\AuthCheck.Component.csproj `
+    --configuration Release `
+    --no-restore `
+    --no-incremental
 ```
 
-It performs these steps:
-
-1. verify the .NET SDK and authoritative WIT digest;
-2. restore locked NuGet dependencies;
-3. run the ordinary policy tests;
-4. generate bindings and build `auth_check.component.wasm`;
-5. validate and inspect the component;
-6. compile `auth_check.aot` with the pinned Hyperlight AOT compiler;
-7. create and validate a local single-layer OCI layout.
-
-The result summary includes component, AOT, and OCI manifest digests and:
+The pinned preview SDK runs WIT generation and NativeAOT as MSBuild targets. It
+writes generated C# under:
 
 ```text
-CompatibleWithCurrentApimHost : False
+samples/AuthCheck.Component/obj/Release/net10.0/wasi-wasm/wit_bindgen/
 ```
 
-That compatibility result is expected today. `Build-Prototype.ps1` finishes so
-developers can inspect every stage, but its zero exit code is not a deployment
-approval.
+It writes the component to:
+
+```text
+samples/AuthCheck.Component/bin/Release/net10.0/wasi-wasm/publish/auth_check.wasm
+```
+
+Use `dotnet build` rather than `dotnet publish`: this preview SDK already runs its
+publish target after build, while invoking `dotnet publish` directly creates a
+circular target dependency.
 
 ## Validation gates
 
 ### 1. WIT source digest
 
-The build normalizes CRLF to LF, calculates SHA-256 for `policy.wit`, and compares
-it with `eng/versions.json`. A mismatch stops the build before bindings are used.
+The expected normalized SHA-256 for `policy.wit` is:
+
+```text
+d187a23aaa117fa8c21b29c9f09ac07cb6ac0eaa021820fe3e94d3b12c93ef6e
+```
+
+Repository automation checks this before bindings are used. A standalone consumer
+should obtain the contract from a versioned Toolkit package once one exists; the
+source prototype currently carries it beside the sample.
 
 ### 2. Exact APIM component world
 
-Run the fail-closed deployment gate:
+Install the official prebuilt `wasm-tools` `1.256.0` archive for the platform and
+verify its published SHA-256. For Windows x64:
 
 ```powershell
-.\eng\Test-ComponentContract.ps1 `
-    -ComponentPath .\artifacts\auth_check.component.wasm
+$Tools = Join-Path $PWD ".tools"
+$Archive = Join-Path $Tools "wasm-tools-1.256.0-x86_64-windows.zip"
+$Url = "https://github.com/bytecodealliance/wasm-tools/releases/download/v1.256.0/wasm-tools-1.256.0-x86_64-windows.zip"
+$Expected = "8ce28d91e40ac077a40e133d332d7909747f5179e795e3f022cfbad95e5df3b7"
+
+New-Item -ItemType Directory -Path $Tools -Force | Out-Null
+Invoke-WebRequest -Uri $Url -OutFile $Archive
+if ((Get-FileHash $Archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Expected)
+{
+    throw "wasm-tools archive SHA-256 mismatch."
+}
+
+Expand-Archive $Archive -DestinationPath $Tools -Force
+$WasmToolsDirectory = Join-Path $Tools "wasm-tools-1.256.0-x86_64-windows"
+$env:PATH = "$WasmToolsDirectory;$env:PATH"
+wasm-tools --version
 ```
 
-The script runs `wasm-tools validate` and `wasm-tools component targets` against
-the authoritative `policy` world. It currently fails because Componentize.NET
-adds 18 WASI Preview 2 imports. This failure is correct.
-
-For local diagnosis only, capture the generated contract while allowing the known
-incompatibility:
+Inspect the output and run the fail-closed target check:
 
 ```powershell
-.\eng\Test-ComponentContract.ps1 `
-    -ComponentPath .\artifacts\auth_check.component.wasm `
-    -ContractOutputPath .\artifacts\auth_check.component.wit `
-    -AllowUnexpectedImports
+$Component = ".\samples\AuthCheck.Component\bin\Release\net10.0\wasi-wasm\publish\auth_check.wasm"
+
+wasm-tools validate $Component
+wasm-tools component wit $Component
+wasm-tools component targets -w policy .\wit $Component
 ```
 
-Never use `-AllowUnexpectedImports` as a deployment gate.
+Validation and WIT printing succeed. The target check fails because
+Componentize.NET adds 18 WASI Preview 2 imports. This is the expected result and
+the current deployment stop.
 
 ### 3. Hyperlight AOT
 
-The build compiles the component with pinned `hyperlight-wasm-aot` for
-`x86_64-unknown-none`. A successful compile proves only that the AOT compiler
-accepted the component. It does not prove the APIM host can link or safely execute
-it.
+APIM requires `hyperlight-wasm-aot` `0.15.0` output for
+`x86_64-unknown-none`. The direct command is:
+
+```text
+hyperlight-wasm-aot compile --component auth_check.wasm auth_check.aot
+```
+
+There is no official prebuilt Windows binary for that pinned version. The public
+distribution is a source package, so this is not currently a standalone
+library-user step. Customers should not compile build tooling from source as part
+of this flow. A trusted binary distribution is an additional tooling prerequisite
+before the AOT stage can be customer-ready.
 
 An ordinary .NET assembly, the portable `.wasm` component, or output from a
 different AOT/runtime version is not an APIM module.
 
 ### 4. OCI artifact
 
-`Test-OciArtifact.ps1` validates:
+After a trusted compiler produces `auth_check.aot`, package it with the official
+prebuilt ORAS `1.3.0` CLI:
+
+```powershell
+$OrasArchive = Join-Path $Tools "oras_1.3.0_windows_amd64.zip"
+$OrasUrl = "https://github.com/oras-project/oras/releases/download/v1.3.0/oras_1.3.0_windows_amd64.zip"
+$OrasExpected = "b050e93aa0dc7a79a61fa8e4074dfa302c41d4af01b634fe393c5dd687536aee"
+
+Invoke-WebRequest -Uri $OrasUrl -OutFile $OrasArchive
+if ((Get-FileHash $OrasArchive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $OrasExpected)
+{
+    throw "ORAS archive SHA-256 mismatch."
+}
+
+$OrasDirectory = Join-Path $Tools "oras-1.3.0"
+Expand-Archive $OrasArchive -DestinationPath $OrasDirectory -Force
+$env:PATH = "$OrasDirectory;$env:PATH"
+oras version
+
+oras push --oci-layout ".\artifacts\auth-check-oci:v1" `
+    ".\artifacts\auth_check.aot:application/vnd.hyperlight.policy.v1+aot" `
+    --artifact-type "application/vnd.hyperlight.policy.v1+aot"
+
+oras manifest fetch --oci-layout ".\artifacts\auth-check-oci:v1"
+```
+
+Validate:
 
 - OCI image manifest schema `2`;
 - manifest media type `application/vnd.oci.image.manifest.v1+json`;
@@ -280,14 +344,6 @@ different AOT/runtime version is not an APIM module.
 - empty config media type `application/vnd.oci.empty.v1+json`;
 - exactly one layer no larger than `67,108,864` bytes;
 - manifest, descriptor, blob size, and SHA-256 consistency.
-
-Re-run it directly when inspecting an existing local layout:
-
-```powershell
-.\eng\Test-OciArtifact.ps1 `
-    -LayoutPath .\artifacts\auth-check-oci `
-    -OrasPath $Oras
-```
 
 ### 5. Real runtime
 
@@ -358,11 +414,12 @@ validates that the full reference targets ACR and contains a tag or digest.
 
 | Message or result | Meaning | Action |
 | --- | --- | --- |
-| `.NET SDK '10.0.400' is required` | Another SDK was selected | Install the pinned SDK and run from the prototype directory so `global.json` applies |
-| `.NET runtime '8.0.x' is required` | The unit-test host is missing | Install the .NET 8 runtime |
-| `SHA-256 digest ... expected ...` | A tool archive or WIT file differs from the pin | Delete the download, verify the network source, and retry; do not bypass the check |
-| `does not target the exact APIM policy world` | The component has missing or additional imports/exports | Inspect the captured WIT; today the expected cause is ambient WASI imports |
-| `CompatibleWithCurrentApimHost : False` | Build/package succeeded but deployment compatibility did not | Stop before ACR publication |
+| SDK selection is not `10.0.400` | Another SDK was selected | Install the pinned SDK and run where `global.json` applies |
+| The .NET 8 test host is missing | Only .NET 10 is installed | Install the .NET 8 runtime |
+| NativeAOT package restore fails | The public experimental feed is missing or unavailable | Add the exact `dotnet-experimental` source shown above; do not use a private feed |
+| `component targets` reports missing `wasi:*` imports | The component has interfaces APIM does not provide | This is the current known blocker; stop before AOT or publication |
+| `dotnet publish` reports a circular dependency | The preview SDK already publishes during build | Use the documented `dotnet build` command |
+| A CLI archive hash differs | The download does not match the release pin | Delete it, verify the public release URL, and retry; do not bypass the check |
 | `The AOT component ... does not exist` | Component or AOT compilation did not complete | Review the preceding .NET or AOT error |
 | `expected exactly one` | OCI manifest has the wrong number of layers | Repackage only the `.aot` file |
 | `exceeds ... bytes` | The AOT layer is larger than APIM's 64 MiB limit | Reduce the artifact before publishing |
@@ -392,6 +449,25 @@ prototype uses:
 Componentize.NET and NativeAOT-LLVM are prerelease dependencies from the public
 `dotnet-experimental` feed. NuGet lock files record their exact package content
 hashes.
+
+</details>
+
+<details>
+<summary>Repository-maintainer automation</summary>
+
+The `prototype/wasm-policy/eng` scripts automate verified tool acquisition,
+repeatable builds, exact-world validation, AOT compilation, and OCI checks for
+repository maintenance and CI. They are not the library-user API or customer
+workflow.
+
+- `Install-Tools.ps1` can build the pinned AOT CLI from its verified source
+  package for maintainers.
+- `Build-Prototype.ps1` chains tests, component build, inspection, AOT, and local
+  OCI validation while retaining the known incompatibility for analysis.
+- `Test-ComponentContract.ps1` and `Test-OciArtifact.ps1` are regression gates
+  around the direct commands documented above.
+
+The customer quickstart intentionally does not invoke these wrappers.
 
 </details>
 

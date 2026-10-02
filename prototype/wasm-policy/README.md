@@ -8,17 +8,34 @@ Start with the [customer quickstart](../../docs/WasmPolicyQuickstart.md), then u
 the [technical guide](../../docs/WasmPolicyModules.md) for API, build, validation,
 and troubleshooting details.
 
-## Validate locally
+## Build with .NET
 
 ```powershell
-rustup toolchain install 1.94.1 --profile minimal
-.\eng\Install-Tools.ps1
+dotnet restore .\WasmPolicyPrototype.slnx --locked-mode
 
-$env:PATH = "$(Resolve-Path .\.tools\bin);$(Resolve-Path .\.tools\oras-1.3.0);$env:PATH"
-$Oras = Resolve-Path .\.tools\oras-1.3.0\oras.exe
-.\eng\Build-Prototype.ps1 -OrasPath $Oras
+dotnet test .\test\AuthCheck.Tests\AuthCheck.Tests.csproj `
+    --configuration Release `
+    --no-restore
+
+dotnet build .\samples\AuthCheck.Component\AuthCheck.Component.csproj `
+    --configuration Release `
+    --no-restore `
+    --no-incremental
 ```
 
-The build is expected to report
-`CompatibleWithCurrentApimHost : False`. The generated component has ambient WASI
-imports and must not be deployed.
+The component is written to:
+
+```text
+samples/AuthCheck.Component/bin/Release/net10.0/wasi-wasm/publish/auth_check.wasm
+```
+
+Follow the [technical guide](../../docs/WasmPolicyModules.md) to install the
+official prebuilt `wasm-tools` binary and run the exact APIM world check. It
+currently fails because the generated component has ambient WASI imports and must
+not be deployed.
+
+## Repository-maintainer automation
+
+The `eng` scripts retain reproducible tool bootstrap, AOT, and OCI validation for
+repository maintenance and CI. They are not required by the .NET library-user
+flow.

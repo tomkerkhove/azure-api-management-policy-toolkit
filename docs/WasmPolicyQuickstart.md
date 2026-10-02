@@ -1,82 +1,148 @@
 # Try .NET policy modules for `run-wasm-module`
 
-This quickstart shows the proposed customer experience for writing request
-allow/reject logic in C#, testing it locally, packaging it for Azure API
-Management, and referencing it from an APIM policy.
+This quickstart shows the proposed .NET customer experience for writing APIM
+request allow/reject logic, testing it, producing a WebAssembly component, and
+checking whether it matches the APIM contract.
 
 > [!CAUTION]
-> This is an experimental preview in source form, not a deployable .NET module
-> path. You can author, test, build, and inspect the sample today. The generated
-> .NET component is rejected by the current APIM runtime compatibility check, so
-> do not publish or configure it in a service. The ACR and APIM steps below show
-> the target workflow and are clearly marked **contract only**.
+> This is an experimental source sample, not a deployable .NET module path.
+> The direct .NET build works, but its component imports runtime interfaces that
+> APIM does not provide. The compatibility check in this guide therefore fails
+> by design. Stop there. The later AOT, ACR, and APIM steps describe the target
+> contract only.
 
-For implementation details, API reference, and troubleshooting, see the
+For API details and troubleshooting, see the
 [.NET WASM policy module technical guide](WasmPolicyModules.md).
 
 ## What this enables
 
-A .NET policy module receives a read-only view of the current request and returns
-one of two outcomes:
+A policy module receives a read-only request context and returns one outcome:
 
 - **Allow** — continue the APIM policy pipeline.
-- **Reject** — stop normal processing and return an HTTP response through APIM's
-  normal `on-error` flow.
+- **Reject** — return an HTTP response through APIM's normal `on-error` flow.
 
-The sample allows requests that contain a non-empty `Authorization` header and
-rejects other requests with `401 Unauthorized`.
+The sample allows a request with a non-empty `Authorization` header and otherwise
+returns `401 Unauthorized`.
 
-This is separate from the existing Policy Toolkit XML authoring model. Existing
-methods such as `SetHeader`, `SendRequest`, and `CacheLookup` do not run inside the
-module. The Toolkit only uses `RunWasmModule` to generate the XML element that
-references a packaged module.
+This is separate from the existing Policy Toolkit XML DSL. Existing methods such
+as `SetHeader` and `SendRequest` do not execute inside the module.
 
 ## Prerequisites
 
-To try the local authoring flow:
+- Windows x64
+- [.NET SDK `10.0.400`](https://dotnet.microsoft.com/download/dotnet/10.0)
+- .NET runtime `8.0` for the sample tests
+- PowerShell 7 for the copy/paste commands
 
-- Windows x64 with PowerShell 7
-- .NET SDK `10.0.400` and .NET runtime `8.0`
-- Rust toolchain manager (`rustup`)
-- this repository and branch
+The pinned Componentize.NET build does **not** require the
+`wasi-experimental` workload. It was verified with no installed workloads.
+Componentize.NET supplies the MSBuild and WIT-binding targets through NuGet.
 
-The provided setup script installs the pinned WASM, Hyperlight AOT, and ORAS tools
-under the prototype directory after verifying their download hashes.
+The build uses these prerelease packages:
 
-The target APIM deployment flow additionally requires:
+| Package | Version | Source |
+| --- | --- | --- |
+| `BytecodeAlliance.Componentize.DotNet.Wasm.SDK` | `0.8.0-preview00011` | NuGet.org |
+| `runtime.win-x64.Microsoft.DotNet.ILCompiler.LLVM` | `10.0.0-rc.1.26306.1` | public `dotnet-experimental` feed |
 
-- an Azure Container Registry
-- an APIM service with a system-assigned managed identity
-- APIM product-preview enablement on a supported managed SKU v1 Windows x64 host
+The technologies are prerelease and intentionally isolated from the shipping
+Policy Toolkit packages.
 
-The feature is not generally available or customer-enabled today.
+## 1. Get or create the sample
 
-## 1. Set up the sample
+The runnable source sample is
+[`prototype/wasm-policy`](../prototype/wasm-policy/). Download that folder as a
+source archive or copy it into a working directory; a version-control checkout is not
+required.
 
-From the repository root:
-
-```powershell
-cd prototype\wasm-policy
-
-rustup toolchain install 1.94.1 --profile minimal
-.\eng\Install-Tools.ps1
-
-$env:PATH = "$(Resolve-Path .\.tools\bin);$(Resolve-Path .\.tools\oras-1.3.0);$env:PATH"
-$Oras = Resolve-Path .\.tools\oras-1.3.0\oras.exe
-```
-
-The sample contains:
+It contains:
 
 ```text
-samples/AuthCheck/             C# policy logic
-samples/AuthCheck.Component/   generated-WIT adapter and component project
-test/AuthCheck.Tests/          ordinary .NET unit tests
+samples/AuthCheck/             policy logic
+samples/AuthCheck.Component/   Componentize.NET project and WIT adapter
+test/AuthCheck.Tests/          ordinary .NET tests
+src/PolicyToolkit.Wasm.Experimental/
+wit/policy.wit
+NuGet.config
+global.json
 ```
 
-No experimental package or project template is published. The prototype API is
-referenced directly from `src/PolicyToolkit.Wasm.Experimental`.
+The sample already contains the source-only Toolkit API and policy projects. To
+recreate its Componentize.NET project with standard .NET commands:
 
-## 2. Write allow/reject logic
+```powershell
+dotnet new classlib `
+    --name Contoso.AuthPolicy.Component `
+    --framework net10.0
+
+dotnet new nugetconfig
+```
+
+Replace the generated `NuGet.config` package sources with:
+
+```xml
+<packageSources>
+  <clear />
+  <add
+      key="dotnet-experimental"
+      value="https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-experimental/nuget/v3/index.json" />
+  <add
+      key="nuget.org"
+      value="https://api.nuget.org/v3/index.json" />
+</packageSources>
+```
+
+Then add the exact packages:
+
+```powershell
+dotnet add .\Contoso.AuthPolicy.Component package `
+    BytecodeAlliance.Componentize.DotNet.Wasm.SDK `
+    --version 0.8.0-preview00011
+
+dotnet add .\Contoso.AuthPolicy.Component package `
+    runtime.win-x64.Microsoft.DotNet.ILCompiler.LLVM `
+    --version 10.0.0-rc.1.26306.1
+```
+
+The experimental Toolkit API is not yet published as a NuGet package or template.
+Use the checked-in source sample until a package is available.
+
+## 2. Configure the component project
+
+The component project uses ordinary SDK-style MSBuild:
+
+```xml
+<PropertyGroup>
+  <OutputType>Library</OutputType>
+  <TargetFramework>net10.0</TargetFramework>
+  <RuntimeIdentifier>wasi-wasm</RuntimeIdentifier>
+  <UseAppHost>false</UseAppHost>
+  <PublishTrimmed>true</PublishTrimmed>
+  <InvariantGlobalization>true</InvariantGlobalization>
+  <SelfContained>true</SelfContained>
+  <TargetName>auth_check</TargetName>
+</PropertyGroup>
+
+<ItemGroup>
+  <PackageReference
+      Include="BytecodeAlliance.Componentize.DotNet.Wasm.SDK"
+      Version="0.8.0-preview00011" />
+  <PackageReference
+      Include="runtime.win-x64.microsoft.dotnet.ilcompiler.llvm"
+      Version="10.0.0-rc.1.26306.1" />
+</ItemGroup>
+
+<ItemGroup>
+  <Wit Remove="**/*.wit" />
+  <Wit Include="../../wit" World="policy" />
+  <LinkerArg Include="-Wl,--max-memory=67108864" />
+</ItemGroup>
+```
+
+`policy.wit` is the authoritative APIM guest interface. Componentize.NET generates
+the C# bindings during `dotnet build`; do not hand-copy those ABI types.
+
+## 3. Write deterministic policy logic
 
 The complete sample is
 [`AuthCheckPolicy.cs`](../prototype/wasm-policy/samples/AuthCheck/AuthCheckPolicy.cs):
@@ -103,73 +169,148 @@ public sealed class AuthCheckPolicy : IWasmPolicyModule
 }
 ```
 
-Keep module logic deterministic. The current contract does not provide outbound
-HTTP, files, sockets, environment variables, host clocks, random data, named
-values, or persistent state.
+The current contract does not provide outbound HTTP, files, sockets, environment
+variables, host clocks, random data, named values, request mutation, or persistent
+state.
 
-## 3. Unit test the policy
+## 4. Unit test with `dotnet test`
 
-Run the policy as ordinary .NET code:
-
-```powershell
-dotnet test .\test\AuthCheck.Tests\AuthCheck.Tests.csproj --configuration Release
-```
-
-The sample tests allow, reject, case-insensitive header lookup, and empty-header
-behavior. No Hyperlight host or Azure resource is needed.
-
-## 4. Build and package locally
-
-One command runs the tests, generates WIT bindings, builds the component, compiles
-the Hyperlight AOT file, and creates a validated local OCI layout:
+From the downloaded `wasm-policy` sample directory:
 
 ```powershell
-.\eng\Build-Prototype.ps1 -OrasPath $Oras
+dotnet restore .\WasmPolicyPrototype.slnx --locked-mode
+
+dotnet test .\test\AuthCheck.Tests\AuthCheck.Tests.csproj `
+    --configuration Release `
+    --no-restore
 ```
 
-Outputs are written under `artifacts`:
+The tests run as ordinary .NET and do not need Azure or Hyperlight.
+
+## 5. Build the component with `dotnet build`
+
+```powershell
+dotnet build `
+    .\samples\AuthCheck.Component\AuthCheck.Component.csproj `
+    --configuration Release `
+    --no-restore `
+    --no-incremental
+```
+
+Componentize.NET generates bindings under:
 
 ```text
-artifacts/auth_check.component.wasm
-artifacts/auth_check.aot
-artifacts/auth-check-oci/
+samples/AuthCheck.Component/obj/Release/net10.0/wasi-wasm/wit_bindgen/
 ```
 
-The command currently reports:
+The component output is:
 
 ```text
-CompatibleWithCurrentApimHost : False
+samples/AuthCheck.Component/bin/Release/net10.0/wasi-wasm/publish/auth_check.wasm
 ```
 
-That result is expected and is the reason this artifact must not be deployed.
-A successful build proves packaging, not runtime compatibility.
+Use `dotnet build`, not `dotnet publish`, with this pinned preview SDK. Its build
+targets already produce the published component.
 
-## 5. Run the deployment-readiness gate
+## 6. Install the pinned `wasm-tools` binary
 
-The strict validation command compares the component with the exact APIM policy
-contract:
+`wasm-tools` `1.256.0` has an official Windows x64 release archive. Download and
+verify it directly:
 
 ```powershell
-.\eng\Test-ComponentContract.ps1 `
-    -ComponentPath .\artifacts\auth_check.component.wasm
+$Tools = Join-Path $PWD ".tools"
+$WasmToolsZip = Join-Path $Tools "wasm-tools-1.256.0-x86_64-windows.zip"
+$WasmToolsUrl = "https://github.com/bytecodealliance/wasm-tools/releases/download/v1.256.0/wasm-tools-1.256.0-x86_64-windows.zip"
+$WasmToolsSha256 = "8ce28d91e40ac077a40e133d332d7909747f5179e795e3f022cfbad95e5df3b7"
+
+New-Item -ItemType Directory -Path $Tools -Force | Out-Null
+Invoke-WebRequest -Uri $WasmToolsUrl -OutFile $WasmToolsZip
+
+$Actual = (Get-FileHash $WasmToolsZip -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($Actual -ne $WasmToolsSha256)
+{
+    throw "wasm-tools archive SHA-256 mismatch."
+}
+
+Expand-Archive $WasmToolsZip -DestinationPath $Tools -Force
+$WasmToolsDirectory = Join-Path $Tools "wasm-tools-1.256.0-x86_64-windows"
+$env:PATH = "$WasmToolsDirectory;$env:PATH"
+wasm-tools --version
 ```
 
-It currently fails because the .NET toolchain adds 18 WASI runtime imports that
-APIM does not provide. Treat this command as the deployment gate: it must succeed,
-and real Hyperlight allow/reject/reset tests must pass, before publishing a .NET
-module for APIM.
+## 7. Inspect and check compatibility
 
-The local build also validates that the OCI artifact has exactly one AOT layer,
-uses the expected media types, stays within 64 MiB, and matches all declared
-SHA-256 digests.
+```powershell
+$Component = ".\samples\AuthCheck.Component\bin\Release\net10.0\wasi-wasm\publish\auth_check.wasm"
 
-## 6. Push to ACR and capture a digest — contract only
+wasm-tools validate $Component
+wasm-tools component wit $Component
+wasm-tools component targets -w policy .\wit $Component
+```
+
+The first two commands succeed. The final command currently fails and reports
+missing `wasi:*` imports. This is the required stop point: the component does not
+target the exact APIM world and is not deployable.
+
+Do not treat a successful .NET build as runtime approval.
+
+## 8. Hyperlight AOT — tooling blocked for customers
+
+APIM loads a Hyperlight AOT file, not the portable `.wasm` component. The pinned
+compiler command is:
+
+```text
+hyperlight-wasm-aot compile --component auth_check.wasm auth_check.aot
+```
+
+However, `hyperlight-wasm-aot` `0.15.0` does not have an official prebuilt Windows
+release binary. The available distribution is a source package. This quickstart
+does not ask customers to compile the tool. A trusted, pinned binary distribution
+is required before AOT can be a standalone customer step.
+
+Even with a trusted AOT compiler, the current component remains blocked by the
+compatibility failure above and by the missing successful real-Hyperlight test.
+
+## 9. Package and push with ORAS — target contract only
 
 > [!WARNING]
-> Do not run this step with the current sample artifact. It documents the target
-> customer workflow after the runtime blocker is resolved.
+> Do not publish the current sample. These commands describe the target workflow
+> after the component and AOT gates pass.
 
-Authenticate without enabling the ACR admin account:
+Install the official ORAS `1.3.0` Windows x64 binary:
+
+```powershell
+$OrasZip = Join-Path $Tools "oras_1.3.0_windows_amd64.zip"
+$OrasUrl = "https://github.com/oras-project/oras/releases/download/v1.3.0/oras_1.3.0_windows_amd64.zip"
+$OrasSha256 = "b050e93aa0dc7a79a61fa8e4074dfa302c41d4af01b634fe393c5dd687536aee"
+
+Invoke-WebRequest -Uri $OrasUrl -OutFile $OrasZip
+$Actual = (Get-FileHash $OrasZip -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($Actual -ne $OrasSha256)
+{
+    throw "ORAS archive SHA-256 mismatch."
+}
+
+$OrasDirectory = Join-Path $Tools "oras-1.3.0"
+Expand-Archive $OrasZip -DestinationPath $OrasDirectory -Force
+$env:PATH = "$OrasDirectory;$env:PATH"
+oras version
+```
+
+After a trusted AOT compiler produces `auth_check.aot`, create a local OCI layout:
+
+```powershell
+oras push --oci-layout ".\artifacts\auth-check-oci:v1" `
+    ".\artifacts\auth_check.aot:application/vnd.hyperlight.policy.v1+aot" `
+    --artifact-type "application/vnd.hyperlight.policy.v1+aot" `
+    --annotation "org.opencontainers.image.created=2026-10-02T00:00:00Z"
+
+oras manifest fetch --oci-layout ".\artifacts\auth-check-oci:v1"
+```
+
+The APIM contract requires exactly one AOT layer no larger than 64 MiB.
+
+To push to ACR and capture the immutable digest:
 
 ```powershell
 $AcrName = "contoso"
@@ -179,42 +320,26 @@ $Tag = "2026.10.02"
 
 az login
 az acr login --name $AcrName
-```
 
-Push the single AOT layer and capture its immutable manifest digest:
-
-```powershell
-Push-Location .\artifacts
-try
-{
-    $Result = oras push "$Registry/$Repository`:$Tag" `
-        "auth_check.aot:application/vnd.hyperlight.policy.v1+aot" `
-        --artifact-type "application/vnd.hyperlight.policy.v1+aot" `
-        --annotation "org.opencontainers.image.created=2026-10-02T00:00:00Z" `
-        --format json | ConvertFrom-Json
-}
-finally
-{
-    Pop-Location
-}
+$Result = oras push "$Registry/$Repository`:$Tag" `
+    ".\artifacts\auth_check.aot:application/vnd.hyperlight.policy.v1+aot" `
+    --artifact-type "application/vnd.hyperlight.policy.v1+aot" `
+    --annotation "org.opencontainers.image.created=2026-10-02T00:00:00Z" `
+    --format json | ConvertFrom-Json
 
 $ModuleUri = "oci://$Registry/$Repository@$($Result.digest)"
 $ModuleUri
 ```
 
-Save the printed digest reference. Do not use a mutable tag in an APIM policy:
-tags remain cached for the gateway process lifetime and are not a rolling update
-mechanism.
+Use the digest reference, not a mutable tag.
 
-## 7. Configure APIM access — contract only
+## 10. Configure and invoke APIM — target contract only
 
-Enable the APIM system-assigned managed identity and grant pull access only to the
-registry:
+Enable the APIM system-assigned identity and grant registry-scoped pull access:
 
 ```powershell
 $ResourceGroup = "contoso-api-rg"
 $ApimName = "contoso-apim"
-$AcrName = "contoso"
 
 az apim update `
     --resource-group $ResourceGroup `
@@ -227,10 +352,7 @@ $PrincipalId = az apim show `
     --query identity.principalId `
     --output tsv
 
-$AcrId = az acr show `
-    --name $AcrName `
-    --query id `
-    --output tsv
+$AcrId = az acr show --name $AcrName --query id --output tsv
 
 az role assignment create `
     --assignee-object-id $PrincipalId `
@@ -239,12 +361,7 @@ az role assignment create `
     --scope $AcrId
 ```
 
-For an ABAC-enabled registry, grant `Container Registry Repository Reader`
-instead of `AcrPull`. Do not enable anonymous pull or the registry admin account.
-
-## 8. Invoke the module — contract only
-
-In Policy Toolkit C#:
+Reference the immutable module from Policy Toolkit C#:
 
 ```csharp
 public void Inbound(IInboundContext context)
@@ -257,56 +374,30 @@ public void Inbound(IInboundContext context)
 }
 ```
 
-The Toolkit compiles it to:
+The compiler emits:
 
 ```xml
 <run-wasm-module
     module-uri="oci://contoso.azurecr.io/policies/auth-check@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" />
 ```
 
-`module-uri` must be a literal ACR tag or digest reference. The Toolkit rejects
-policy expressions; APIM validates the full URI.
+An allow result continues the inbound pipeline. A rejection or module error enters
+normal `on-error` processing.
 
-## 9. Observe the result — target behavior
-
-With the authorization sample:
-
-- a request with `Authorization: Bearer example` returns **allow** and the next
-  inbound policy runs;
-- a request without the header returns **reject** with `401 Unauthorized` and
-  `WWW-Authenticate: Bearer`;
-- a reject or module error follows normal APIM `on-error` processing, so an
-  `on-error` policy can replace the eventual response;
-- APIM tracing records the module reference and the `allow` or `reject` outcome,
-  not request data.
-
-Module load, ACR pull, compatibility, timeout, and execution failures also enter
-the policy runtime error path. They are not successful authorization decisions.
-
-## 10. Update and roll back
-
-1. Change and unit test the C# policy.
-2. Build and pass the strict compatibility and real-runtime gates.
-3. Push a new artifact and record its new digest.
-4. Deploy a policy that references the new digest.
-5. Keep the previous digest available until verification is complete.
-
-Rollback by redeploying the previous digest. Do not repoint a tag and assume
-running gateways will refresh it.
+For an update, publish a new digest and change the policy reference. Roll back by
+redeploying the previous digest. Repointing a tag is not a rolling update.
 
 ## Current limitations
 
-- The generated .NET component is not compatible with the current APIM host.
-- A restricted compatibility-adapter experiment removed the extra imports but
-  faulted on its first real Hyperlight invocation.
-- APIM `run-wasm-module` is a product prototype, not a generally available
+- The direct .NET component has 18 ambient WASI imports and fails the exact APIM
+  world check.
+- No real-Hyperlight .NET allow/reject/reset test passes today.
+- The pinned AOT compiler lacks an official prebuilt customer binary.
+- The experimental Toolkit API is source-only; no NuGet package or template is
+  published.
+- `run-wasm-module` is an APIM product prototype, not a generally available
   customer feature.
-- The prototype supports local authoring on Windows x64; it does not publish a
-  NuGet package or `dotnet new` template.
-- Existing Policy Toolkit XML policies cannot be compiled into WASM modules.
-- A module can inspect context and return allow/reject; it cannot call arbitrary
-  APIM policies or mutate the request.
 
 Continue with the
-[technical guide](WasmPolicyModules.md) for the complete API surface, generated
-bindings, validation gates, OCI contract, and troubleshooting.
+[technical guide](WasmPolicyModules.md) for API details, validation gates, and
+maintainer automation.

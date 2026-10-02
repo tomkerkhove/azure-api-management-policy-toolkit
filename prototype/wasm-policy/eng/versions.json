@@ -8,12 +8,15 @@
   "wasmTools": {
     "package": "wasm-tools",
     "version": "1.256.0",
-    "crateSha256": "648fb01b39cb01354037807cdd4ae4e384590a1bdb727018bc12b68fb03ed385"
+    "crateSha256": "648fb01b39cb01354037807cdd4ae4e384590a1bdb727018bc12b68fb03ed385",
+    "windowsX64Url": "https://github.com/bytecodealliance/wasm-tools/releases/download/v1.256.0/wasm-tools-1.256.0-x86_64-windows.zip",
+    "windowsX64Sha256": "8ce28d91e40ac077a40e133d332d7909747f5179e795e3f022cfbad95e5df3b7"
   },
   "hyperlightWasmAot": {
     "package": "hyperlight-wasm-aot",
     "version": "0.15.0",
-    "crateSha256": "b183b0031abe0dca7127bed2fd741640ac1716ae30a810b60a93c2b468846cb8"
+    "crateSha256": "b183b0031abe0dca7127bed2fd741640ac1716ae30a810b60a93c2b468846cb8",
+    "officialPrebuiltBinary": false
   },
   "oras": {
     "version": "1.3.0",
