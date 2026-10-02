@@ -1,0 +1,10 @@
+{
+  "sourceRepository": "AAPT-APIManagement",
+  "sourceBranch": "main",
+  "sourceCommit": "8e214cbcc0a290685a0161af1ab53a6168e9fd19",
+  "sourcePath": "Proxy/Native/Hyperlight/upstream/wit/policy.wit",
+  "retrievedOn": "2026-10-01",
+  "package": "demo:policy@0.2.0",
+  "abiVersion": 3,
+  "sha256": "d187a23aaa117fa8c21b29c9f09ac07cb6ac0eaa021820fe3e94d3b12c93ef6e"
+}

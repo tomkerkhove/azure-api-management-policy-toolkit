@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/AuthCheck.Component/AuthCheck.Component.csproj" />
+  </Folder>
+  <Folder Name="/samples/AuthCheck/">
+    <Project Path="samples/AuthCheck/AuthCheckPolicy.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/PolicyToolkit.Wasm.Experimental/PolicyToolkit.Wasm.Experimental.csproj" />
+  </Folder>
+  <Folder Name="/test/">
+    <Project Path="test/AuthCheck.Tests/AuthCheck.Tests.csproj" />
+  </Folder>
+</Solution>

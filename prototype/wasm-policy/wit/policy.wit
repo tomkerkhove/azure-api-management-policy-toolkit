@@ -1,0 +1,220 @@
+package demo:policy@0.2.0;
+
+/// A user policy component. The host runs it in a Hyperlight sandbox.
+world policy {
+    import api-inspector;
+    export handler;
+}
+
+/// Capabilities provided to a policy by the host.
+interface api-inspector {
+    /// Write a policy message to the host output.
+    log: func(message: string, source: string);
+}
+
+/// What the guest sees and does.
+interface handler {
+    use types.{context, decision};
+
+    /// The host calls this once per API request. The guest reads the
+    /// request and response context and returns what the gateway should do.
+    on-request: func(context: context) -> decision;
+}
+
+interface types {
+    /// One APIM dictionary entry with all values preserved.
+    record string-values {
+        name: string,
+        values: list<string>,
+    }
+
+    record string-property {
+        name: string,
+        value: string,
+    }
+
+    /// A language-neutral representation of System.TimeSpan.
+    record duration {
+        ticks: u64,
+    }
+
+    record foundry {
+        deployment: string,
+    }
+
+    /// A parsed URL. Query entries may repeat for multi-valued parameters.
+    record url {
+        scheme: string,
+        host: string,
+        port: s32,
+        path: string,
+        query-string: string,
+        query: list<string-values>,
+    }
+
+    /// The HTTP request that is currently being processed.
+    record request {
+        body: option<list<u8>>,
+        foundry: foundry,
+        headers: list<string-values>,
+        ip-address: string,
+        method: string,      // "GET", "POST"
+        matched-parameters: list<string-property>,
+        original-url: url,
+        url: url,
+    }
+
+    /// The HTTP response being built by the gateway.
+    record response {
+        body: list<u8>,
+        headers: list<string-values>,
+        status-code: s32,         // 200, 401, 429
+        status-reason: string,
+    }
+
+    record subscription-key-parameter-names {
+        header: string,
+        query: string,
+    }
+
+    record api {
+        id: string,
+        name: string,
+        path: string,
+        service-url: url,
+        version: string,
+        revision: string,
+        is-current-revision: bool,
+        protocols: list<string>,
+        subscription-key-parameter-names: subscription-key-parameter-names,
+    }
+
+    record operation {
+        id: string,
+        name: string,
+        method: string,
+        url-template: string,
+    }
+
+    enum product-state {
+        not-published,
+        published,
+    }
+
+    record group {
+        id: string,
+        name: string,
+    }
+
+    record product {
+        approval-required: bool,
+        groups: list<group>,
+        id: string,
+        name: string,
+        state: product-state,
+        subscriptions-limit: option<s32>,
+        subscription-required: bool,
+    }
+
+    /// Date values use ISO 8601 strings because WIT has no date-time scalar.
+    record subscription {
+        id: string,
+        name: string,
+        created-date: string,
+        start-date: option<string>,
+        end-date: option<string>,
+        key: string,
+        primary-key: string,
+        secondary-key: string,
+    }
+
+    record gateway {
+        id: string,
+        instance-id: string,
+        is-managed: bool,
+    }
+
+    enum carbon-intensity-category {
+        low,
+        medium,
+        high,
+    }
+
+    record sustainability-info {
+        current-carbon-intensity: carbon-intensity-category,
+    }
+
+    record deployment {
+        gateway-id: string,
+        region: string,
+        service-id: string,
+        service-name: string,
+        gateway: gateway,
+        sustainability-info: sustainability-info,
+        certificates: list<string-property>,
+    }
+
+    record user-identity {
+        id: string,
+        provider: string,
+    }
+
+    record user {
+        id: string,
+        email: string,
+        first-name: string,
+        last-name: string,
+        note: string,
+        registration-date: string,
+        groups: list<group>,
+        identities: list<user-identity>,
+    }
+
+    record workspace {
+        id: string,
+        name: string,
+    }
+
+    record last-error {
+        source: string,
+        reason: string,
+        message: string,
+        scope: string,
+        section: string,
+        path: string,
+        policy-id: string,
+    }
+
+    record graphql {
+        graphql-arguments: list<string-property>,
+        parent: list<string-property>,
+    }
+
+    /// The reduced API Management policy context exposed to a guest.
+    record context {
+        request: request,
+        response: response,
+        api: api,
+        operation: operation,
+        product: product,
+        subscription: subscription,
+        deployment: deployment,
+        request-id: string,
+        timestamp: string,
+        elapsed: duration,
+        variables: list<string-property>,
+        user: user,
+        workspace: workspace,
+        tracing: bool,
+        last-error: last-error,
+        graphql: graphql,
+    }
+
+    /// What the gateway does with the request.
+    variant decision {
+        /// Forward to the backend.
+        allow,
+        /// Return the supplied response without forwarding the request.
+        reject(response),
+    }
+}
