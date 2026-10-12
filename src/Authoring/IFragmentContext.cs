@@ -279,6 +279,15 @@ public interface IFragmentContext : IHaveExpressionContext
     void InvokeRequest(InvokeRequestConfig config);
 
     /// <summary>
+    /// Executes an OCI-packaged WebAssembly policy module.<br />
+    /// Compiled to the <c>run-wasm-module</c> prototype policy.
+    /// </summary>
+    /// <param name="config">
+    /// Configuration for the run-wasm-module policy.
+    /// </param>
+    void RunWasmModule(RunWasmModuleConfig config);
+
+    /// <summary>
     /// Invokes a Dapr binding with the specified configuration.<br/>
     /// This policy allows you to interact with Dapr bindings to trigger external resources or services.<br/>
     /// Compiled to <a href="https://learn.microsoft.com/en-us/azure/api-management/invoke-dapr-binding-policy">invoke-dapr-binding</a> policy.

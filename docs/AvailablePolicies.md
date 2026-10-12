@@ -70,6 +70,7 @@ Notes:
 - ✅ return-response
 - ✅ retry
 - ✅ rewrite-uri
+- 🔧 run-wasm-module (inbound and policy fragments; prototype availability)
 - ✅ send-one-way-request
 - ✅ send-request
 - ✅ send-service-bus-message
