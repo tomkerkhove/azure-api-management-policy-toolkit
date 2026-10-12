@@ -1,10 +1,10 @@
 {
   "sourceRepository": "AAPT-APIManagement",
-  "sourceBranch": "main",
-  "sourceCommit": "8e214cbcc0a290685a0161af1ab53a6168e9fd19",
-  "sourcePath": "Proxy/Native/Hyperlight/upstream/wit/policy.wit",
-  "retrievedOn": "2026-10-01",
-  "package": "demo:policy@0.2.0",
+  "sourceBranch": "tomkerkhove/rename-wasm-wit-namespace",
+  "sourceCommit": "46a28b25bb470147dcb20a69ec8e59e8b199440f",
+  "sourcePath": ".libraries/Gateway.Hyperlight.Native/wit/policy.wit",
+  "retrievedOn": "2026-10-12",
+  "package": "microsoft:azure-api-management-gateway@0.1.0",
   "abiVersion": 3,
-  "sha256": "d187a23aaa117fa8c21b29c9f09ac07cb6ac0eaa021820fe3e94d3b12c93ef6e"
+  "sha256": "bacee3668ba4d8aabad2890660f8f586148ea9a3860210d463615d84a00d1507"
 }

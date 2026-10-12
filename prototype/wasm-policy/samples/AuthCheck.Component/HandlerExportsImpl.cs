@@ -5,9 +5,9 @@ using AuthCheck;
 
 using Microsoft.Azure.ApiManagement.PolicyToolkit.Wasm;
 
-using Types = PolicyWorld.wit.Imports.demo.policy.v0_2_0.ITypesImports;
+using Types = PolicyWorld.wit.Imports.microsoft.azureApiManagementGateway.v0_1_0.ITypesImports;
 
-namespace PolicyWorld.wit.Exports.demo.policy.v0_2_0;
+namespace PolicyWorld.wit.Exports.microsoft.azureApiManagementGateway.v0_1_0;
 
 public sealed class HandlerExportsImpl : IHandlerExports
 {

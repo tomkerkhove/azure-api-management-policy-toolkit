@@ -141,6 +141,9 @@ The component project uses ordinary SDK-style MSBuild:
 
 `policy.wit` is the authoritative APIM guest interface. Componentize.NET generates
 the C# bindings during `dotnet build`; do not hand-copy those ABI types.
+The current package identity is
+`microsoft:azure-api-management-gateway@0.1.0`; changing a WIT package identity
+changes every generated import, export, and C# binding namespace.
 
 ## 3. Write deterministic policy logic
 

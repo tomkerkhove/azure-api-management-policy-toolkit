@@ -30,8 +30,8 @@
   },
   "apim": {
     "abiVersion": 3,
-    "witPackage": "demo:policy@0.2.0",
-    "witSha256": "d187a23aaa117fa8c21b29c9f09ac07cb6ac0eaa021820fe3e94d3b12c93ef6e",
+    "witPackage": "microsoft:azure-api-management-gateway@0.1.0",
+    "witSha256": "bacee3668ba4d8aabad2890660f8f586148ea9a3860210d463615d84a00d1507",
     "manifestMediaType": "application/vnd.oci.image.manifest.v1+json",
     "artifactMediaType": "application/vnd.hyperlight.policy.v1+aot",
     "configMediaType": "application/vnd.oci.empty.v1+json",

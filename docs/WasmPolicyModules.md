@@ -199,6 +199,14 @@ The Componentize.NET project includes that directory:
 
 The build generates C# imports, exports, and interop types under `obj`. Do not
 check those generated files into source and do not recreate WIT records manually.
+For `microsoft:azure-api-management-gateway@0.1.0`, the generated C# namespaces
+are:
+
+```text
+PolicyWorld.wit.Imports.microsoft.azureApiManagementGateway.v0_1_0
+PolicyWorld.wit.Exports.microsoft.azureApiManagementGateway.v0_1_0
+```
+
 The adapter in
 [`HandlerExportsImpl.cs`](../prototype/wasm-policy/samples/AuthCheck.Component/HandlerExportsImpl.cs)
 maps generated request types to the small Toolkit model and maps the decision
@@ -206,7 +214,8 @@ back to the generated response types.
 
 The WIT contract matters because APIM links a module by exact, versioned imports
 and exports. Matching C# type names or producing a valid `.wasm` file is not
-enough.
+enough. Modules built for the previous prototype identity must be rebuilt; WIT
+package identity is part of the component ABI.
 
 ## Build the component with .NET
 
@@ -244,7 +253,7 @@ circular target dependency.
 The expected normalized SHA-256 for `policy.wit` is:
 
 ```text
-d187a23aaa117fa8c21b29c9f09ac07cb6ac0eaa021820fe3e94d3b12c93ef6e
+bacee3668ba4d8aabad2890660f8f586148ea9a3860210d463615d84a00d1507
 ```
 
 Repository automation checks this before bindings are used. A standalone consumer
@@ -476,11 +485,11 @@ The customer quickstart intentionally does not invoke these wrappers.
 
 | Value | Contract |
 | --- | --- |
-| Package/world | `demo:policy@0.2.0` / `policy` |
+| Package/world | `microsoft:azure-api-management-gateway@0.1.0` / `policy` |
 | Host ABI | `3` |
-| Normalized WIT SHA-256 | `d187a23aaa117fa8c21b29c9f09ac07cb6ac0eaa021820fe3e94d3b12c93ef6e` |
-| Export | `demo:policy/handler@0.2.0` |
-| Allowed imports | `demo:policy/api-inspector@0.2.0`, `demo:policy/types@0.2.0` |
+| Normalized WIT SHA-256 | `bacee3668ba4d8aabad2890660f8f586148ea9a3860210d463615d84a00d1507` |
+| Export | `microsoft:azure-api-management-gateway/handler@0.1.0` |
+| Allowed imports | `microsoft:azure-api-management-gateway/api-inspector@0.1.0`, `microsoft:azure-api-management-gateway/types@0.1.0` |
 
 The full WIT defines request/response URLs, headers, body, matched parameters,
 API and operation metadata, product, subscription, deployment, user, workspace,

@@ -59,8 +59,8 @@ $imports = @(
         ForEach-Object { $_.Matches[0].Groups['name'].Value }
 )
 $allowedImports = @(
-    'demo:policy/api-inspector@0.2.0',
-    'demo:policy/types@0.2.0'
+    'microsoft:azure-api-management-gateway/api-inspector@0.1.0',
+    'microsoft:azure-api-management-gateway/types@0.1.0'
 )
 $unexpectedImports = @($imports | Where-Object { $_ -notin $allowedImports })
 $exports = @(

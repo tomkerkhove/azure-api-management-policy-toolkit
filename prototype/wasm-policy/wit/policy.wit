@@ -1,4 +1,4 @@
-package demo:policy@0.2.0;
+package microsoft:azure-api-management-gateway@0.1.0;
 
 /// A user policy component. The host runs it in a Hyperlight sandbox.
 world policy {
