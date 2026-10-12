@@ -1,7 +1,7 @@
 {
   "sourceRepository": "AAPT-APIManagement",
   "sourceBranch": "tomkerkhove/rename-wasm-wit-namespace",
-  "sourceCommit": "46a28b25bb470147dcb20a69ec8e59e8b199440f",
+  "sourceCommit": "524609c0de8d26b1215abaf51771b8556bd4a3b8",
   "sourcePath": ".libraries/Gateway.Hyperlight.Native/wit/policy.wit",
   "retrievedOn": "2026-10-12",
   "package": "microsoft:azure-api-management-gateway@0.1.0",
